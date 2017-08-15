@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import ssl
+import sys
 
 import aiohttp
 from yarl import URL
@@ -59,10 +60,13 @@ class Docker:
         if docker_host is None:
             docker_host = os.environ.get('DOCKER_HOST', None)
         if docker_host is None:
-            for sockpath in _sock_search_paths:
-                if sockpath.is_socket():
-                    docker_host = 'unix://' + str(sockpath)
-                    break
+            if sys.platform in ('linux', 'darwin'):
+                for sockpath in _sock_search_paths:
+                    if sockpath.is_socket():
+                        docker_host = 'unix://' + str(sockpath)
+                        break
+            elif sys.platform == 'win32':
+                docker_host = 'npipe:////./pipe/docker_engine'
         self.docker_host = docker_host
 
         assert _rx_version.search(api_version) is not None, \
@@ -82,6 +86,9 @@ class Docker:
                 connector = aiohttp.UnixConnector(docker_host[7:])
                 # dummy hostname for URL composition
                 self.docker_host = "unix://localhost"
+            elif docker_host.startswith('npipe://'):
+                # TODO: create named-pipe connector for aiohttp
+                raise NotImplementedError('Missing named pipe support.')
             else:
                 raise ValueError('Missing protocol scheme in docker_host.')
         self.connector = connector
